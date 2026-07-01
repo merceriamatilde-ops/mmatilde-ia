@@ -2,6 +2,7 @@ import os
 import re
 import json
 import base64
+import hashlib
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,6 +14,13 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from prompts import SYSTEM_PROMPT
+from learned_rules import (
+    extraer_texto_busqueda,
+    obtener_contexto_aprendizaje,
+    formatear_bloque_reglas,
+    formatear_bloque_ejemplos,
+    registrar_consulta,
+)
 from models import (
     ConsultaResponse,
     ResumenProyecto,
@@ -231,6 +239,13 @@ async def consulta_proyecto(
 
     messages = [SystemMessage(content=SYSTEM_PROMPT)]
 
+    texto_busqueda = extraer_texto_busqueda(contexto_data)
+    ctx_aprendizaje = await obtener_contexto_aprendizaje(texto_busqueda)
+    bloque_extra = formatear_bloque_reglas(ctx_aprendizaje.get("reglas") or [])
+    bloque_extra += formatear_bloque_ejemplos(ctx_aprendizaje.get("ejemplos") or [])
+    if bloque_extra:
+        messages[0] = SystemMessage(content=SYSTEM_PROMPT + bloque_extra)
+
     content: list[dict] = [{"type": "text", "text": _build_context_message(contexto_data)}]
 
     if imagen:
@@ -258,7 +273,16 @@ async def consulta_proyecto(
             detail="No pudimos interpretar la respuesta de la IA. Intentá de nuevo.",
         )
     except Exception as e:
+        err = str(e)
         print(f"[gemini] Error: {e}")
+        if "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower():
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "La asistente está muy solicitada en este momento (límite diario de consultas). "
+                    "Probá de nuevo en unos minutos o escribinos por WhatsApp y te ayudamos."
+                ),
+            )
         raise HTTPException(status_code=502, detail="Error al consultar la IA")
 
     estado = ia_data.get("estado", "preguntando")
@@ -301,6 +325,20 @@ async def consulta_proyecto(
         productos = await sugerir_productos(
             resultado.insumos,
             aproximada=resultado.completitud == "aproximada",
+        )
+
+        resultado_dict = resultado.model_dump()
+        productos_json = json.dumps([p.model_dump() for p in productos], ensure_ascii=False)
+        idem_key = hashlib.sha256(
+            (contexto + json.dumps(resultado_dict, sort_keys=True)).encode("utf-8")
+        ).hexdigest()
+        await registrar_consulta(
+            proyecto=resumen.proyecto or "Sin título",
+            tecnica=resultado.tecnica_detectada,
+            contexto_json=contexto,
+            resultado_json=json.dumps(resultado_dict, ensure_ascii=False),
+            productos_json=productos_json,
+            idempotency_key=idem_key,
         )
 
     return ConsultaResponse(

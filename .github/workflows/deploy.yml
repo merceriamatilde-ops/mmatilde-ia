@@ -20,7 +20,7 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
-          source: "main.py,prompts.py,models.py,catalog.py,requirements.txt,list_models.py"
+          source: "main.py,prompts.py,models.py,catalog.py,learned_rules.py,requirements.txt,list_models.py"
           target: "/var/www/mmatilde-ia"
           strip_components: 0
 
