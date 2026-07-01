@@ -1,0 +1,38 @@
+name: Deploy IA Backend to VPS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Copy files to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          source: "main.py,prompts.py,models.py,catalog.py,requirements.txt,list_models.py"
+          target: "/var/www/mmatilde-ia"
+          strip_components: 0
+
+      - name: Install deps and restart
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            cd /var/www/mmatilde-ia
+            python3 -m venv venv --upgrade-deps 2>/dev/null || python3 -m venv venv
+            ./venv/bin/pip install -r requirements.txt
+            sudo systemctl restart mmatilde-ia.service
