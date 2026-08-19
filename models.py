@@ -36,6 +36,8 @@ class ResultadoEstimacion(BaseModel):
     insumos: list[Insumo]
     nota: str = ""
     completitud: Literal["exacta", "aproximada"] = "exacta"
+    supuestos: list[str] = Field(default_factory=list)
+    chequeos: list[str] = Field(default_factory=list)
 
 
 class ProductoSugerido(BaseModel):

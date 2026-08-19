@@ -195,11 +195,28 @@ def _normalize_resultado(data: dict) -> ResultadoEstimacion | None:
     if completitud not in ("exacta", "aproximada"):
         completitud = "aproximada" if len(insumos) > 3 else "exacta"
 
+    chequeos_raw = resultado_raw.get("chequeos") or []
+    if isinstance(chequeos_raw, str):
+        chequeos = [chequeos_raw] if chequeos_raw.strip() else []
+    else:
+        chequeos = [str(c).strip() for c in chequeos_raw if c]
+
+    supuestos_raw = resultado_raw.get("supuestos") or []
+    if isinstance(supuestos_raw, str):
+        supuestos = [supuestos_raw] if supuestos_raw.strip() else []
+    else:
+        supuestos = [str(s).strip() for s in supuestos_raw if s]
+
+    if not chequeos:
+        chequeos = ["catálogo propio", "rango de cantidad", "destinatario"]
+
     return ResultadoEstimacion(
         tecnica_detectada=tecnica,
         insumos=insumos,
         nota=_safe_str(resultado_raw.get("nota")),
         completitud=completitud,
+        supuestos=supuestos,
+        chequeos=chequeos,
     )
 
 

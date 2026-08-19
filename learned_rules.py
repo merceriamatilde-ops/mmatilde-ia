@@ -66,9 +66,11 @@ def formatear_bloque_reglas(reglas: list) -> str:
     if not lineas:
         return ""
     return (
-        "\n\nREGLAS APRENDIDAS (solo las relevantes a este proyecto — OBLIGATORIAS):\n"
+        "\n\nREGLAS APRENDIDAS (solo las relevantes a este proyecto):\n"
         + "\n".join(lineas)
-        + "\nPriorizalas sobre estimaciones genéricas."
+        + "\nAplicá cada regla SOLO si el destinatario coincide "
+        "(adulto / bebé / niño / mascota). Si la regla habla de adulto y el cliente pidió bebé, IGNORALA."
+        "\nPriorizalas sobre estimaciones genéricas cuando apliquen."
     )
 
 
