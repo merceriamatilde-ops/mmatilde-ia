@@ -13,6 +13,27 @@ def _api_base() -> str:
     return api_url.rsplit("/api", 1)[0] + "/api"
 
 
+async def subir_imagen_consulta(
+    image_bytes: bytes,
+    filename: str = "consulta.jpg",
+    mime: str = "image/jpeg",
+) -> str | None:
+    if not image_bytes:
+        return None
+    url = f"{_api_base()}/ia/consultas/imagen"
+    files = {"file": (filename or "consulta.jpg", image_bytes, mime or "image/jpeg")}
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(url, files=files)
+            if resp.status_code == 200:
+                data = resp.json() or {}
+                return data.get("url")
+            print(f"[learned_rules] Upload imagen {resp.status_code}: {resp.text[:250]}")
+    except Exception as e:
+        print(f"[learned_rules] No se pudo subir imagen a {url}: {e}")
+    return None
+
+
 def extraer_texto_busqueda(contexto_data: dict) -> str:
     parts: list[str] = []
     parts.append(str(contexto_data.get("descripcion_inicial", "")))

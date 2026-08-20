@@ -21,6 +21,7 @@ from learned_rules import (
     formatear_bloque_reglas,
     formatear_bloque_ejemplos,
     registrar_consulta,
+    subir_imagen_consulta,
 )
 from models import (
     ConsultaResponse,
@@ -305,6 +306,14 @@ async def consulta_proyecto(
         )
         content[0]["text"] += "\n\n(El cliente adjuntó una foto de referencia — usala para inferir técnica, colores y tipo de proyecto.)"
         contexto_data["tuvo_foto"] = True
+        if not contexto_data.get("imagen_url"):
+            uploaded = await subir_imagen_consulta(
+                image_bytes,
+                imagen.filename or "consulta.jpg",
+                mime,
+            )
+            if uploaded:
+                contexto_data["imagen_url"] = uploaded
 
     contexto_guardado = json.dumps(contexto_data, ensure_ascii=False)
 
@@ -403,6 +412,7 @@ async def consulta_proyecto(
         preguntas=preguntas,
         resultado=resultado,
         productos_sugeridos=productos,
+        imagen_url=contexto_data.get("imagen_url") if isinstance(contexto_data.get("imagen_url"), str) else None,
     )
 
 

@@ -63,3 +63,4 @@ class ConsultaResponse(BaseModel):
     preguntas: list[Pregunta] = Field(default_factory=list)
     resultado: Optional[ResultadoEstimacion] = None
     productos_sugeridos: list[ProductoSugerido] = Field(default_factory=list)
+    imagen_url: Optional[str] = None
