@@ -3,6 +3,7 @@ import re
 import json
 import base64
 import hashlib
+import asyncio
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -70,6 +71,7 @@ def get_llm() -> ChatGoogleGenerativeAI:
             temperature=0.3,
             google_api_key=api_key,
             response_mime_type="application/json",
+            max_retries=1,
         )
     return _llm
 
@@ -163,6 +165,30 @@ def _safe_str(value, default: str = "") -> str:
         return default
     text = str(value).strip()
     return text if text else default
+
+
+def _gemini_retryable(err: str) -> bool:
+    lower = err.lower()
+    return any(
+        token in lower
+        for token in ("503", "unavailable", "429", "resource_exhausted", "high demand", "overloaded")
+    )
+
+
+async def _ainvoke_gemini(messages):
+    last: Exception | None = None
+    for attempt in range(3):
+        try:
+            return await get_llm().ainvoke(messages)
+        except Exception as e:
+            last = e
+            if not _gemini_retryable(str(e)) or attempt == 2:
+                raise
+            wait = 1.5 * (attempt + 1)
+            print(f"[gemini] retry {attempt + 1} in {wait}s: {e}")
+            await asyncio.sleep(wait)
+    assert last is not None
+    raise last
 
 
 def _normalize_resultado(data: dict) -> ResultadoEstimacion | None:
@@ -278,11 +304,14 @@ async def consulta_proyecto(
             {"type": "image_url", "image_url": f"data:{mime};base64,{encoded}"}
         )
         content[0]["text"] += "\n\n(El cliente adjuntó una foto de referencia — usala para inferir técnica, colores y tipo de proyecto.)"
+        contexto_data["tuvo_foto"] = True
+
+    contexto_guardado = json.dumps(contexto_data, ensure_ascii=False)
 
     messages.append(HumanMessage(content=content))
 
     try:
-        response = get_llm().invoke(messages)
+        response = await _ainvoke_gemini(messages)
         ia_data = _parse_ia_json(response.content)
     except json.JSONDecodeError:
         raise HTTPException(
@@ -292,12 +321,12 @@ async def consulta_proyecto(
     except Exception as e:
         err = str(e)
         print(f"[gemini] Error: {e}")
-        if "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower():
+        if _gemini_retryable(err) or "quota" in err.lower():
             raise HTTPException(
                 status_code=503,
                 detail=(
-                    "La asistente está muy solicitada en este momento (límite diario de consultas). "
-                    "Probá de nuevo en unos minutos o escribinos por WhatsApp y te ayudamos."
+                    "La asistente está saturada un momento (Gemini sin cupo o con mucha demanda). "
+                    "Esperá 15 segundos y tocá de nuevo."
                 ),
             )
         raise HTTPException(status_code=502, detail="Error al consultar la IA")
@@ -345,17 +374,25 @@ async def consulta_proyecto(
         )
 
         resultado_dict = resultado.model_dump()
+        contexto_data["resumen"] = {
+            "proyecto": resumen.proyecto,
+            "tecnica": resumen.tecnica,
+            "detalles": resumen.detalles,
+        }
+        contexto_guardado = json.dumps(contexto_data, ensure_ascii=False)
         productos_json = json.dumps([p.model_dump() for p in productos], ensure_ascii=False)
         idem_key = hashlib.sha256(
-            (contexto + json.dumps(resultado_dict, sort_keys=True)).encode("utf-8")
+            (contexto_guardado + json.dumps(resultado_dict, sort_keys=True)).encode("utf-8")
         ).hexdigest()
+        imagen_url = contexto_data.get("imagen_url")
         await registrar_consulta(
             proyecto=resumen.proyecto or "Sin título",
             tecnica=resultado.tecnica_detectada,
-            contexto_json=contexto,
+            contexto_json=contexto_guardado,
             resultado_json=json.dumps(resultado_dict, ensure_ascii=False),
             productos_json=productos_json,
             idempotency_key=idem_key,
+            imagen_url=imagen_url if isinstance(imagen_url, str) and imagen_url.strip() else None,
         )
 
     return ConsultaResponse(

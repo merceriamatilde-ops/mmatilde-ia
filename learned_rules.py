@@ -101,6 +101,7 @@ async def registrar_consulta(
     resultado_json: str,
     productos_json: str | None,
     idempotency_key: str | None = None,
+    imagen_url: str | None = None,
 ) -> None:
     base = _api_base()
     payload = {
@@ -109,6 +110,7 @@ async def registrar_consulta(
         "contextoJson": contexto_json,
         "resultadoJson": resultado_json,
         "productosJson": productos_json,
+        "imagenUrl": imagen_url,
     }
     headers = {}
     if idempotency_key:
